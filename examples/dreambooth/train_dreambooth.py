@@ -357,8 +357,6 @@ class DreamBoothDataset(Dataset):
                 self.class_prompt = class_prompt
                 self.num_class_images = len(self.class_images_path)
                 self._length = max(self.num_class_images, self.num_instance_images)
-            else:
-                self.class_data_root = None
 
         self.image_transforms = transforms.Compose(
             [
@@ -368,6 +366,9 @@ class DreamBoothDataset(Dataset):
                 transforms.Normalize([0.5], [0.5]),
             ]
         )
+
+        self.class_data_root = class_data_root
+
 
     def __len__(self):
         return self._length

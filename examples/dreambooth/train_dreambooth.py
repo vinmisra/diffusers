@@ -524,19 +524,20 @@ def main(args):
     if args.multi_instance:
         #validate args are in the right format, set up directories, etc.
         instance_dir_parent = Path(args.instance_data_dir)
-        lst_instance_names = [x.name for x in list(instance_dir_parent.iterdir())]
+        lst_instance_names = [x.name for x in sorted(list(instance_dir_parent.iterdir()))]
 
         lst_instance_prompts = args.instance_prompt.split('\%\%')
-        lst_class_prompts = args.class_prompt.split('\%\%')
-
-        assert(len(lst_instance_names) == len(lst_class_prompts))
         assert(len(lst_instance_names) == len(lst_instance_prompts))
 
-        class_dir_parent = Path(args.class_data_dir)
-        lst_class_images = []
-        for instance_name, class_prompt in zip(lst_instance_names, lst_class_prompts):
-            class_images_dir = class_dir_parent / instance_name
-            hydrate_class_folder(class_images_dir, class_prompt, args, accelerator)
+        if args.with_prior_preservation:
+            lst_class_prompts = args.class_prompt.split('\%\%')
+            assert(len(lst_instance_names) == len(lst_class_prompts))
+        
+            class_dir_parent = Path(args.class_data_dir)
+            lst_class_images = []
+            for instance_name, class_prompt in zip(lst_instance_names, lst_class_prompts):
+                class_images_dir = class_dir_parent / instance_name
+                hydrate_class_folder(class_images_dir, class_prompt, args, accelerator)
     elif args.with_prior_preservation:
         class_images_dir = Path(args.class_data_dir)
         hydrate_class_folder(class_images_dir, args.class_prompt, args, accelerator)

@@ -324,14 +324,15 @@ class DreamBoothDataset(Dataset):
                 
                 self.instance_images_path.extend(
                     [
-                        lst_imagepath_instance[index % len(lst_imagepath_instance)] for index in range(n_samples)
+                        lst_imagepath_instance[index % len(lst_imagepath_instance)] \
+                            for index in range(n_samples)
                     ]
                 )
                 if class_data_root is not None:
                     self.class_images_path.extend(
                         [
                             lst_imagepath_class[index % len(lst_imagepath_class)] \
-                                for index in range(len(lst_imagepath_instance))
+                                for index in range(n_samples)
                         ]
                     )
                 

@@ -379,7 +379,7 @@ class DreamBoothDataset(Dataset):
             instance_image = instance_image.convert("RGB")
 
         if self.multi_instance:
-            instance_prompt = self.lst_instance_prompt[self.which_instance[index]]
+            instance_prompt = self.lst_instance_prompts[self.which_instance[index]]
         else:
             instance_prompt = self.instance_prompt
         
@@ -398,7 +398,7 @@ class DreamBoothDataset(Dataset):
                 class_image = class_image.convert("RGB")
 
             if self.multi_instance:
-                class_prompt = self.lst_class_prompt[self.which_instance[index]]
+                class_prompt = self.lst_class_prompts[self.which_instance[index]]
             else:
                 class_prompt = self.class_prompt
 

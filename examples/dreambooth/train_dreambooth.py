@@ -306,6 +306,7 @@ class DreamBoothDataset(Dataset):
             #order instances by folder name, and order images by image name. We assume prompts are ordered similarly, and we assume classdirs have the same names.
             self.instance_images_path = []
             self.class_images_path = []
+            self.which_instance = []
             lst_path_instance_dir = sorted(list(Path(instance_data_root).iterdir()))
 
             if class_data_root is not None:

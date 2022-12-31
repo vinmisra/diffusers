@@ -116,11 +116,11 @@ def parse_args(input_args=None):
     parser.add_argument("--prior_loss_weight", type=float, default=1.0, help="The weight of prior preservation loss.")
     parser.add_argument(
         "--num_class_images",
-        type=int,
+        type=str,
         default=100,
         help=(
             "Minimal class images for prior preservation loss. If there are not enough images already present in"
-            " class_data_dir, additional images will be sampled with class_prompt."
+            " class_data_dir, additional images will be sampled with class_prompt. List of numbers, one for each entity, separted by symbol \%\%"
         ),
     )
     parser.add_argument(
@@ -151,15 +151,15 @@ def parse_args(input_args=None):
     )
     parser.add_argument("--num_train_epochs", type=int, default=1)
     parser.add_argument(
-        "--max_train_steps",
-        type=int,
-        default=None,
-        help="Total number of training steps to perform.  If provided, overrides num_train_epochs.",
+        "--snapshot_steps",
+        type=str,
+        default=800,
+        help="Total number of training steps to perform. Multiple can be provided as sequence of \%\%-separated ints. Each results in a snapshot output subdirectory.",
     )
     parser.add_argument(
         "--checkpointing_steps",
         type=int,
-        default=500,
+        default=100000,
         help=(
             "Save a checkpoint of the training state every X updates. These checkpoints can be used both as final"
             " checkpoints in case they are better than the last checkpoint, and are also suitable for resuming"
@@ -464,12 +464,12 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
     else:
         return f"{organization}/{model_id}"
 
-def hydrate_class_folder(class_images_dir:Path, class_prompt:str, args, accelerator):
+def hydrate_class_folder(class_images_dir:Path, class_prompt:str, num_class_images:int, args, accelerator):
     if not class_images_dir.exists():
         class_images_dir.mkdir(parents=True)
     cur_class_images = len(list(class_images_dir.iterdir()))
 
-    if cur_class_images < args.num_class_images:
+    if cur_class_images < num_class_images:
         torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
         pipeline = DiffusionPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
@@ -479,7 +479,7 @@ def hydrate_class_folder(class_images_dir:Path, class_prompt:str, args, accelera
         )
         pipeline.set_progress_bar_config(disable=True)
 
-        num_new_images = args.num_class_images - cur_class_images
+        num_new_images = num_class_images - cur_class_images
         logger.info(f"Number of class images to sample: {num_new_images}.")
 
         sample_dataset = PromptDataset(class_prompt, num_new_images)
@@ -534,16 +534,18 @@ def main(args):
 
         if args.with_prior_preservation:
             lst_class_prompts = args.class_prompt.split('\%\%')
+            lst_num_class_images = [int(n) for n in args.num_class_images.split('\%\%')]
             assert(len(lst_instance_names) == len(lst_class_prompts))
+            assert(len(lst_instance_names) == len(lst_num_class_images))
         
             class_dir_parent = Path(args.class_data_dir)
             lst_class_images = []
-            for instance_name, class_prompt in zip(lst_instance_names, lst_class_prompts):
+            for instance_name, class_prompt, num_class_images in zip(lst_instance_names, lst_class_prompts, lst_num_class_images):
                 class_images_dir = class_dir_parent / instance_name
-                hydrate_class_folder(class_images_dir, class_prompt, args, accelerator)
+                hydrate_class_folder(class_images_dir, class_prompt, num_class_images, args, accelerator)
     elif args.with_prior_preservation:
         class_images_dir = Path(args.class_data_dir)
-        hydrate_class_folder(class_images_dir, args.class_prompt, args, accelerator)
+        hydrate_class_folder(class_images_dir, args.class_prompt, args.num_class_images, args, accelerator)
 
     # Handle the repository creation
     if accelerator.is_main_process:
@@ -666,11 +668,10 @@ def main(args):
     )
 
     # Scheduler and math around the number of training steps.
-    overrode_max_train_steps = False
+    args.snapshot_steps = [int(x) for x in args.snapshot_steps.split('\%\%')]
+    args.max_train_steps=args.snapshot_steps[-1]
+
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
-    if args.max_train_steps is None:
-        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
-        overrode_max_train_steps = True
 
     lr_scheduler = get_scheduler(
         args.lr_scheduler,
@@ -704,8 +705,7 @@ def main(args):
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
-    if overrode_max_train_steps:
-        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
@@ -835,6 +835,17 @@ def main(args):
 
             if global_step >= args.max_train_steps:
                 break
+            elif global_step in args.snapshot_steps:
+                pipeline = DiffusionPipeline.from_pretrained(
+                    args.pretrained_model_name_or_path,
+                    unet=accelerator.unwrap_model(unet),
+                    text_encoder=accelerator.unwrap_model(text_encoder),
+                    revision=args.revision,
+                )
+                path_snapshot = os.path.join(args.output_dir,f'model-iters-{global_step}')
+                if not os.path.exists(path_snapshot):
+                    os.makedirs(path_snapshot)
+                pipeline.save_pretrained(path_snapshot)
 
         accelerator.wait_for_everyone()
 

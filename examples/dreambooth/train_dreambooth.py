@@ -93,13 +93,13 @@ def parse_args(input_args=None):
         type=str,
         default=None,
         required=True,
-        help="The prompt with identifier specifying the instance. OR a '\%\%'-separated list of such prompts for each instance.",
+        help="The prompt with identifier specifying the instance. OR a ':::'-separated list of such prompts for each instance.",
     )
     parser.add_argument(
         "--class_prompt",
         type=str,
         default=None,
-        help="The prompt to specify images in the same class as provided instance images. OR a '\%\%'-separated list of such prompts for each instance.",
+        help="The prompt to specify images in the same class as provided instance images. OR a ':::'-separated list of such prompts for each instance.",
     )
     parser.add_argument(
         "--multi_instance",
@@ -120,7 +120,7 @@ def parse_args(input_args=None):
         default=100,
         help=(
             "Minimal class images for prior preservation loss. If there are not enough images already present in"
-            " class_data_dir, additional images will be sampled with class_prompt. List of numbers, one for each entity, separted by symbol \%\%"
+            " class_data_dir, additional images will be sampled with class_prompt. List of numbers, one for each entity, separted by symbol :::"
         ),
     )
     parser.add_argument(
@@ -154,7 +154,7 @@ def parse_args(input_args=None):
         "--snapshot_steps",
         type=str,
         default=800,
-        help="Total number of training steps to perform. Multiple can be provided as sequence of \%\%-separated ints. Each results in a snapshot output subdirectory.",
+        help="Total number of training steps to perform. Multiple can be provided as sequence of :::-separated ints. Each results in a snapshot output subdirectory.",
     )
     parser.add_argument(
         "--checkpointing_steps",
@@ -489,16 +489,16 @@ def main(args):
     
     if args.multi_instance:
         #validate args are in the right format, set up directories, etc.
-        lst_instance_dir = [Path(x) for x in args.instance_data_dir.split('\%\%')]        
-        lst_instance_prompts = args.instance_prompt.split('\%\%')
+        lst_instance_dir = [Path(x) for x in args.instance_data_dir.split(':::')]        
+        lst_instance_prompts = args.instance_prompt.split(':::')
         print(lst_instance_dir)
         print(lst_instance_prompts)
         assert(len(lst_instance_dir) == len(lst_instance_prompts))
 
         if args.with_prior_preservation:
-            lst_class_dir = [Path(x) for x in args.class_data_dir.split('\%\%')]
-            lst_class_prompts = args.class_prompt.split('\%\%')
-            lst_num_class_images = [int(n) for n in args.num_class_images.split('\%\%')]
+            lst_class_dir = [Path(x) for x in args.class_data_dir.split(':::')]
+            lst_class_prompts = args.class_prompt.split(':::')
+            lst_num_class_images = [int(n) for n in args.num_class_images.split(':::')]
             assert(len(lst_instance_dir) == len(lst_class_dir))
             assert(len(lst_instance_dir) == len(lst_class_prompts))
             assert(len(lst_instance_dir) == len(lst_num_class_images))
@@ -613,10 +613,10 @@ def main(args):
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
 
     train_dataset = DreamBoothDataset(
-        lst_instance_dir=args.instance_data_dir.split('\%\%'),
-        lst_instance_prompt=args.instance_prompt.split('\%\%'),
-        lst_class_dir=args.class_data_dir.split('\%\%') if args.with_prior_preservation else None,
-        lst_class_prompt=args.class_prompt.split('\%\%') if args.with_prior_preservation else None,
+        lst_instance_dir=args.instance_data_dir.split(':::'),
+        lst_instance_prompt=args.instance_prompt.split(':::'),
+        lst_class_dir=args.class_data_dir.split(':::') if args.with_prior_preservation else None,
+        lst_class_prompt=args.class_prompt.split(':::') if args.with_prior_preservation else None,
         tokenizer=tokenizer,
         size=args.resolution,
         center_crop=args.center_crop,
@@ -632,7 +632,7 @@ def main(args):
     )
 
     # Scheduler and math around the number of training steps.
-    args.snapshot_steps = [int(x) for x in args.snapshot_steps.split('\%\%')]
+    args.snapshot_steps = [int(x) for x in args.snapshot_steps.split(':::')]
     args.max_train_steps=args.snapshot_steps[-1]
 
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)

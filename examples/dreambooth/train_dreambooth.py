@@ -102,12 +102,6 @@ def parse_args(input_args=None):
         help="The prompt to specify images in the same class as provided instance images. OR a ':::'-separated list of such prompts for each instance.",
     )
     parser.add_argument(
-        "--multi_instance",
-        default=False,
-        action="store_true",
-        help="Flag to look for multiple instance examples, multiple instance prompts, multiple class prompts, and storing class images in multiple folders.",
-    )
-    parser.add_argument(
         "--with_prior_preservation",
         default=False,
         action="store_true",
@@ -362,10 +356,7 @@ class DreamBoothDataset(Dataset):
         if not class_image.mode == "RGB":
             class_image = class_image.convert("RGB")
 
-        if self.multi_instance:
-            class_prompt = self.lst_class_prompts[self.which_instance[index]]
-        else:
-            class_prompt = self.class_prompt
+        class_prompt = self.lst_class_prompts[self.which_instance[index]]
 
         example["class_images"] = self.image_transforms(class_image)
         example["class_prompt_ids"] = self.tokenizer(
@@ -487,30 +478,25 @@ def main(args):
     if args.seed is not None:
         set_seed(args.seed)
     
-    if args.multi_instance:
-        #validate args are in the right format, set up directories, etc.
-        lst_instance_dir = [Path(x) for x in args.instance_data_dir.split(':::')]        
-        lst_instance_prompts = args.instance_prompt.split(':::')
-        print(lst_instance_dir)
-        print(lst_instance_prompts)
-        assert(len(lst_instance_dir) == len(lst_instance_prompts))
+    #validate args are in the right format, set up directories, etc.
+    lst_instance_dir = [Path(x) for x in args.instance_data_dir.split(':::')]        
+    lst_instance_prompts = args.instance_prompt.split(':::')
+    print(lst_instance_dir)
+    print(lst_instance_prompts)
+    assert(len(lst_instance_dir) == len(lst_instance_prompts))
 
-        if args.with_prior_preservation:
-            lst_class_dir = [Path(x) for x in args.class_data_dir.split(':::')]
-            lst_class_prompts = args.class_prompt.split(':::')
-            lst_num_class_images = [int(n) for n in args.num_class_images.split(':::')]
-            assert(len(lst_instance_dir) == len(lst_class_dir))
-            assert(len(lst_instance_dir) == len(lst_class_prompts))
-            assert(len(lst_instance_dir) == len(lst_num_class_images))
-        
-            lst_class_images = []
-            for class_dir, class_prompt, num_class_images in zip(lst_class_dir, lst_class_prompts, lst_num_class_images):
-                hydrate_class_folder(class_dir, class_prompt, num_class_images, args, accelerator)
+    if args.with_prior_preservation:
+        lst_class_dir = [Path(x) for x in args.class_data_dir.split(':::')]
+        lst_class_prompts = args.class_prompt.split(':::')
+        lst_num_class_images = [int(n) for n in args.num_class_images.split(':::')]
+        assert(len(lst_instance_dir) == len(lst_class_dir))
+        assert(len(lst_instance_dir) == len(lst_class_prompts))
+        assert(len(lst_instance_dir) == len(lst_num_class_images))
+    
+        lst_class_images = []
+        for class_dir, class_prompt, num_class_images in zip(lst_class_dir, lst_class_prompts, lst_num_class_images):
+            hydrate_class_folder(class_dir, class_prompt, num_class_images, args, accelerator)
                 
-    elif args.with_prior_preservation:
-        class_images_dir = Path(args.class_data_dir)
-        hydrate_class_folder(class_images_dir, args.class_prompt, args.num_class_images, args, accelerator)
-
     # Handle the repository creation
     if accelerator.is_main_process:
         if args.push_to_hub:
@@ -619,8 +605,7 @@ def main(args):
         lst_class_prompt=args.class_prompt.split(':::') if args.with_prior_preservation else None,
         tokenizer=tokenizer,
         size=args.resolution,
-        center_crop=args.center_crop,
-        multi_instance=args.multi_instance
+        center_crop=args.center_crop
     )
 
     train_dataloader = torch.utils.data.DataLoader(

@@ -280,84 +280,54 @@ class DreamBoothDataset(Dataset):
 
     def __init__(
         self,
-        instance_data_root:str,
-        instance_prompt:str,
+        lst_instance_dir:List[str],
+        lst_instance_prompt:List[str],
         tokenizer,
-        class_data_root:Optional[str]=None,
-        class_prompt:Optional[str]=None,
+        lst_class_dir:List[str],
+        lst_class_prompt:List[str],
         size=512,
-        center_crop=False,
-        multi_instance:bool=False
+        center_crop=False
     ):
         self.size = size
         self.center_crop = center_crop
         self.tokenizer = tokenizer
-        self.multi_instance = multi_instance
 
-        if self.multi_instance:
-            assert(len(instance_prompt.split('\%\%'))==len(sorted(list(Path(instance_data_root).iterdir()))))
+        assert(len(lst_instance_prompt)==len(lst_instance_dir))
+        assert(len(lst_instance_prompt)==len(lst_class_dir))
+        assert(len(lst_instance_prompt)==len(lst_class_prompt))
 
-        self.instance_data_root = Path(instance_data_root)
-        if not self.instance_data_root.exists():
-            raise ValueError("Instance images root doesn't exists.")
+        for path in lst_instance_dir+lst_class_dir:
+            if not os.path.exists(path):
+                raise ValueError(f"path doesn't exist {path}")
+        
+        #precompute lengths and other stats for each instance.
+        #order instances by folder name, and order images by image name. We assume prompts are ordered similarly, and we assume classdirs have the same names.
+        self.instance_images_path = []
+        self.class_images_path = []
+        self.which_instance = []
 
-        if self.multi_instance: 
-            #precompute lengths and other stats for each instance.
-            #order instances by folder name, and order images by image name. We assume prompts are ordered similarly, and we assume classdirs have the same names.
-            self.instance_images_path = []
-            self.class_images_path = []
-            self.which_instance = []
-            lst_path_instance_dir = sorted(list(Path(instance_data_root).iterdir()))
-
-            if class_data_root is not None:
-                lst_path_class_dir = sorted(list(Path(class_data_root).iterdir()))
-
-            for idx_instance,instance_image_dir in enumerate(lst_path_instance_dir):
-                lst_imagepath_instance = list(instance_image_dir.iterdir())
-
-                if class_data_root is not None:
-                    class_image_dir = lst_path_class_dir[idx_instance]
-                    lst_imagepath_class = list(class_image_dir.iterdir())
-                    n_samples = max(len(lst_imagepath_instance),len(lst_imagepath_class))
-                else:
-                    n_samples = len(lst_imagepath_instance)
-                
-                self.instance_images_path.extend(
-                    [
-                        lst_imagepath_instance[index % len(lst_imagepath_instance)] \
-                            for index in range(n_samples)
-                    ]
-                )
-                if class_data_root is not None:
-                    self.class_images_path.extend(
-                        [
-                            lst_imagepath_class[index % len(lst_imagepath_class)] \
-                                for index in range(n_samples)
-                        ]
-                    )
-                
-                self.which_instance.extend([idx_instance]*n_samples)
-
-            self.lst_instance_prompts = instance_prompt.split('\%\%')
-            if class_data_root is not None:
-                self.lst_class_prompts = class_prompt.split('\%\%')
+        for idx_instance,(instance_image_dir, class_image_dir) in enumerate(zip(lst_instance_dir,lst_class_dir)):
+            lst_imagepath_instance = list(instance_image_dir.iterdir())
+            lst_imagepath_class = list(class_image_dir.iterdir())
+            n_samples = max(len(lst_imagepath_instance),len(lst_imagepath_class))
             
-            self._length = len(self.instance_images_path)
-        else:
-            self.instance_images_path = list(Path(instance_data_root).iterdir())
-            self.instance_prompt = instance_prompt
+            self.instance_images_path.extend(
+                [
+                    lst_imagepath_instance[index % len(lst_imagepath_instance)] \
+                        for index in range(n_samples)
+                ]
+            )
+            self.class_images_path.extend(
+                [
+                    lst_imagepath_class[index % len(lst_imagepath_class)] \
+                        for index in range(n_samples)
+                ]
+            )
+            self.which_instance.extend([idx_instance]*n_samples)
 
-            self.num_instance_images = len(self.instance_images_path)
-            self._length = self.num_instance_images
-
-            if class_data_root is not None:
-                self.class_data_root = Path(class_data_root)
-                self.class_data_root.mkdir(parents=True, exist_ok=True)
-
-                self.class_images_path = list(self.class_data_root.iterdir())
-                self.class_prompt = class_prompt
-                self.num_class_images = len(self.class_images_path)
-                self._length = max(self.num_class_images, self.num_instance_images)
+        self.lst_instance_prompts = lst_instance_prompt
+        self.lst_class_prompts = lst_class_prompt
+        self._length = len(self.instance_images_path)
 
         self.image_transforms = transforms.Compose(
             [
@@ -368,9 +338,6 @@ class DreamBoothDataset(Dataset):
             ]
         )
 
-        self.class_data_root = class_data_root
-
-
     def __len__(self):
         return self._length
 
@@ -380,10 +347,7 @@ class DreamBoothDataset(Dataset):
         if not instance_image.mode == "RGB":
             instance_image = instance_image.convert("RGB")
 
-        if self.multi_instance:
-            instance_prompt = self.lst_instance_prompts[self.which_instance[index]]
-        else:
-            instance_prompt = self.instance_prompt
+        instance_prompt = self.lst_instance_prompts[self.which_instance[index]]
         
         example["instance_images"] = self.image_transforms(instance_image)
         example["instance_prompt_ids"] = self.tokenizer(
@@ -394,24 +358,23 @@ class DreamBoothDataset(Dataset):
             return_tensors="pt",
         ).input_ids
 
-        if self.class_data_root:
-            class_image = Image.open(self.class_images_path[index])
-            if not class_image.mode == "RGB":
-                class_image = class_image.convert("RGB")
+        class_image = Image.open(self.class_images_path[index])
+        if not class_image.mode == "RGB":
+            class_image = class_image.convert("RGB")
 
-            if self.multi_instance:
-                class_prompt = self.lst_class_prompts[self.which_instance[index]]
-            else:
-                class_prompt = self.class_prompt
+        if self.multi_instance:
+            class_prompt = self.lst_class_prompts[self.which_instance[index]]
+        else:
+            class_prompt = self.class_prompt
 
-            example["class_images"] = self.image_transforms(class_image)
-            example["class_prompt_ids"] = self.tokenizer(
-                class_prompt,
-                truncation=True,
-                padding="max_length",
-                max_length=self.tokenizer.model_max_length,
-                return_tensors="pt",
-            ).input_ids
+        example["class_images"] = self.image_transforms(class_image)
+        example["class_prompt_ids"] = self.tokenizer(
+            class_prompt,
+            truncation=True,
+            padding="max_length",
+            max_length=self.tokenizer.model_max_length,
+            return_tensors="pt",
+        ).input_ids
 
         return example
 
@@ -526,23 +489,22 @@ def main(args):
     
     if args.multi_instance:
         #validate args are in the right format, set up directories, etc.
-        instance_dir_parent = Path(args.instance_data_dir)
-        lst_instance_names = [x.name for x in sorted(list(instance_dir_parent.iterdir()))]
-
+        lst_instance_dir = [Path(x) for x in args.instance_data_dir.split('\%\%')]        
         lst_instance_prompts = args.instance_prompt.split('\%\%')
-        assert(len(lst_instance_names) == len(lst_instance_prompts))
+        assert(len(lst_instance_dir) == len(lst_instance_prompts))
 
         if args.with_prior_preservation:
+            lst_class_dir = [Path(x) for x in args.class_data_dir.split('\%\%')]
             lst_class_prompts = args.class_prompt.split('\%\%')
             lst_num_class_images = [int(n) for n in args.num_class_images.split('\%\%')]
-            assert(len(lst_instance_names) == len(lst_class_prompts))
-            assert(len(lst_instance_names) == len(lst_num_class_images))
+            assert(len(lst_instance_dir) == len(lst_class_dir))
+            assert(len(lst_instance_dir) == len(lst_class_prompts))
+            assert(len(lst_instance_dir) == len(lst_num_class_images))
         
-            class_dir_parent = Path(args.class_data_dir)
             lst_class_images = []
-            for instance_name, class_prompt, num_class_images in zip(lst_instance_names, lst_class_prompts, lst_num_class_images):
-                class_images_dir = class_dir_parent / instance_name
-                hydrate_class_folder(class_images_dir, class_prompt, num_class_images, args, accelerator)
+            for class_dir, class_prompt, num_class_images in zip(lst_class_dir, lst_class_prompts, lst_num_class_images):
+                hydrate_class_folder(class_dir, class_prompt, num_class_images, args, accelerator)
+                
     elif args.with_prior_preservation:
         class_images_dir = Path(args.class_data_dir)
         hydrate_class_folder(class_images_dir, args.class_prompt, args.num_class_images, args, accelerator)
@@ -649,10 +611,10 @@ def main(args):
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
 
     train_dataset = DreamBoothDataset(
-        instance_data_root=args.instance_data_dir,
-        instance_prompt=args.instance_prompt,
-        class_data_root=args.class_data_dir if args.with_prior_preservation else None,
-        class_prompt=args.class_prompt,
+        lst_instance_dir=args.instance_data_dir.split('\%\%'),
+        lst_instance_prompt=args.instance_prompt.split('\%\%'),
+        lst_class_dir=args.class_data_dir.split('\%\%') if args.with_prior_preservation else None,
+        lst_class_prompt=args.class_prompt.split('\%\%') if args.with_prior_preservation else None,
         tokenizer=tokenizer,
         size=args.resolution,
         center_crop=args.center_crop,

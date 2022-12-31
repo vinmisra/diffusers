@@ -5,7 +5,7 @@ import math
 import os
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import torch
 import torch.nn.functional as F

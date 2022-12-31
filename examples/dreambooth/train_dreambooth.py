@@ -301,8 +301,8 @@ class DreamBoothDataset(Dataset):
         self.which_instance = []
 
         for idx_instance,(instance_image_dir, class_image_dir) in enumerate(zip(lst_instance_dir,lst_class_dir)):
-            lst_imagepath_instance = list(instance_image_dir.iterdir())
-            lst_imagepath_class = list(class_image_dir.iterdir())
+            lst_imagepath_instance = list(Path(instance_image_dir).iterdir())
+            lst_imagepath_class = list(Path(class_image_dir).iterdir())
             n_samples = max(len(lst_imagepath_instance),len(lst_imagepath_class))
             
             self.instance_images_path.extend(
@@ -481,8 +481,6 @@ def main(args):
     #validate args are in the right format, set up directories, etc.
     lst_instance_dir = [Path(x) for x in args.instance_data_dir.split(':::')]        
     lst_instance_prompts = args.instance_prompt.split(':::')
-    print(lst_instance_dir)
-    print(lst_instance_prompts)
     assert(len(lst_instance_dir) == len(lst_instance_prompts))
 
     if args.with_prior_preservation:

@@ -615,8 +615,8 @@ def main(args):
     )
 
     # Scheduler and math around the number of training steps.
-    args.snapshot_steps = [int(x) for x in args.snapshot_steps.split(':::')]
-    args.max_train_steps=args.snapshot_steps[-1]
+    snapshot_steps = [int(x) for x in args.snapshot_steps.split(':::')]
+    args.max_train_steps=snapshot_steps[-1]
 
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
 
@@ -780,7 +780,7 @@ def main(args):
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
 
-            if global_step in args.snapshot_steps:
+            if global_step in snapshot_steps:
                 pipeline = DiffusionPipeline.from_pretrained(
                     args.pretrained_model_name_or_path,
                     unet=accelerator.unwrap_model(unet),
